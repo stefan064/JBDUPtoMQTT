@@ -81,7 +81,7 @@ function readRegisterPayload(deviceAddress, register) {
     //Data length, 0 for reads
     result[4] = READ_LENGTH;
     //Checksum: 0x10000 subtract the sum of register and length, U16, 2bytes.
-    const chk = calcChecksum(register + READ_BYTE, result[4]);
+    const chk = calcChecksum(result);
     result[5] =chk[0];
     result[6] =chk[1];
     //Stop Byte
@@ -90,10 +90,13 @@ function readRegisterPayload(deviceAddress, register) {
 }
 
 //calculates the checksum for a request/result
-function calcChecksum(sumOfData, length) {
-    const checksum = Buffer.alloc(2)
+function calcChecksum(packetData) {
     //Checksum is 0x10000 (65536 dec) minus the sum of the data plus its length, returned as a 2 byte array
-    checksum.writeUInt16BE(0x10000-(sumOfData+length));
+    const dataLen = packetData[4];
+    //summed bytes are [2]('status') + [3]('command') + all 'data'
+    const sumOfPayload = packetData.slice(2, 5 + dataLen).reduce((partial_sum, a) => partial_sum + a, 0);
+    const checksum = Buffer.alloc(2)
+    checksum.writeUInt16BE(0x10000 - sumOfPayload);
     return checksum;
 }
 
@@ -101,8 +104,8 @@ function calcChecksum(sumOfData, length) {
 function validateChecksum(result) {
     //Payload is between the 4th and n-3th byte (last 3 bytes are checksum and stop byte)
     //JBD-UP series - probably the same byte positions (?)
-    const sumOfPayload = result.slice(4, result.length-3).reduce((partial_sum, a) => partial_sum + a, 0);
-    const checksum = calcChecksum(sumOfPayload, result[4]);
+    const checksum = calcChecksum(result);
+    logger.trace('Validating checksum: calcChecksum()=0x' + checksum.toString('hex')); //+ ', sumOfPayload=' + sumOfPayload + ', payloadLen=' + result[4]);
     return checksum[0] === result[result.length-3] && checksum[1] === result[result.length-2];
 }
 
@@ -229,7 +232,7 @@ parser.on('data', function (rawData) {
         logger.trace('Data from is valid!');
         switch(rawData[2]) {
             case 0x03:
-                const register3 = register0x03.setData(rawData.slice(1));
+                const register3 = register0x03.setData(rawData.slice(1)); //slice off one byte for JBD UP series to align with existing decoder
                 if(args.mqttbroker) { 
                     logger.trace(register3, 'Register 3 Data: ');
                     mqtt.publish(register3, 'bat' + rawData[1] + '/pack');
@@ -239,10 +242,10 @@ parser.on('data', function (rawData) {
                 }
                 break;
             case 0x04:
-                const register4 = register0x04.setData(rawData.slice(1));
+                const register4 = register0x04.setData(rawData.slice(1)); //slice off one byte for JBD UP series to align with existing decoder
                 if(args.mqttbroker) { 
                     logger.trace(register4, 'Register 4 Data: ');
-                    mqtt.publish(register4, 'bat' + rawData[1] + 'cells');
+                    mqtt.publish(register4, 'bat' + rawData[1] + '/cells');
                 }
                 else {
                     console.log(register4);
@@ -251,7 +254,7 @@ parser.on('data', function (rawData) {
           }
     }
     else {
-        logger.error('Recieved invalid data from BMS!');
+        logger.error('BMS RX data checksum failed!');
     }
 });
 
