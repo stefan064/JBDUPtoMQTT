@@ -14,11 +14,11 @@ async function main() {
     setInterval(
       async function() {
         //send requests, response handled by eventlistener
-          await jbd.getRegister(0x03);
+          await jbd.getRegister(0, 0x03);
           //wait 1s between requests
           await sleep(1000);
           
-          await jbd.getRegister(0x04);
+          await jbd.getRegister(0, 0x04);
       }, 
       args.pollinginterval * 1000
     );

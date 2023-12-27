@@ -67,22 +67,25 @@ const register0x04 = {
     }
 };
 
-function readRegisterPayload(register) {
-    const result = Buffer.alloc(7);
+function readRegisterPayload(deviceAddress, register) {
+    const result = Buffer.alloc(8);
     //Start Byte
     result[0] = START_BYTE;
+    //Specifically for JBD UP series, eg JBD-UP16S010 with support for multiple linked units.
+    //Protocol adds an extra byte to indicate which unit we're talking to:
+    result[1] = deviceAddress;
     //Request type: 0xA5 read, 0x5A write
-    result[1] = READ_BYTE;
+    result[2] = READ_BYTE;
     //Register to use
-    result[2] = register;
+    result[3] = register;
     //Data length, 0 for reads
-    result[3] = READ_LENGTH;
+    result[4] = READ_LENGTH;
     //Checksum: 0x10000 subtract the sum of register and length, U16, 2bytes.
-    const chk = calcChecksum(register, result[3]);
-    result[4] =chk[0];
-    result[5] =chk[1];
+    const chk = calcChecksum(register, result[4]);
+    result[5] =chk[0];
+    result[6] =chk[1];
     //Stop Byte
-    result[6] = STOP_BYTE;
+    result[7] = STOP_BYTE;
     return result;
 }
 
@@ -97,6 +100,7 @@ function calcChecksum(sumOfData, length) {
 //validates the checksum of an incoming result
 function validateChecksum(result) {
     //Payload is between the 4th and n-3th byte (last 3 bytes are checksum and stop byte)
+    //JBD-UP series - probably the same byte positions (?)
     const sumOfPayload = result.slice(4, result.length-3).reduce((partial_sum, a) => partial_sum + a, 0);
     const checksum = calcChecksum(sumOfPayload, result[3]);
     return checksum[0] === result[result.length-3] && checksum[1] === result[result.length-2];
@@ -212,32 +216,33 @@ async function requestData(serialPort, buff, parser){
             reject(err);
         }
         logger.trace(buff.map(b => {return b.toString(16)}), 'Request sent (HEX): ');
-       resolve();
-      })
+        logger.trace('Request: 0x', buff.toString('hex'));
+        resolve();
+    })
     });      
 }
 
 const parser = port.pipe(new Delimiter({ delimiter: Buffer.alloc(1, STOP_BYTE), includeDelimiter: true }));
 parser.on('data', function (rawData) {
-    logger.trace(rawData, 'Recieved Data from BMS (HEX): ');
+    logger.trace('Recieved Data from BMS: 0x' + rawData.toString('hex'));
     if(validateChecksum(rawData)) {
         logger.trace('Data from is valid!');
-        switch(rawData[1]) {
+        switch(rawData[2]) {
             case 0x03:
-                const register3 = register0x03.setData(rawData);
+                const register3 = register0x03.setData(rawData.slice(1));
                 if(args.mqttbroker) { 
                     logger.trace(register3, 'Register 3 Data: ');
-                    mqtt.publish(register3, 'pack');
+                    mqtt.publish(register3, 'bat' + rawData[1] + '/pack');
                 }
                 else {
                     console.log(register3);
                 }
                 break;
             case 0x04:
-                const register4 = register0x04.setData(rawData);
+                const register4 = register0x04.setData(rawData.slice(1));
                 if(args.mqttbroker) { 
                     logger.trace(register4, 'Register 4 Data: ');
-                    mqtt.publish(register4, 'cells');
+                    mqtt.publish(register4, 'bat' + rawData[1] + 'cells');
                 }
                 else {
                     console.log(register4);
@@ -251,10 +256,10 @@ parser.on('data', function (rawData) {
 });
 
 module.exports = { 
-    getRegister: async function(reg) {
+    getRegister: async function(deviceAddress, reg) {
         try {
-            logger.trace(`Getting data from Register ${reg}`);
-            await requestData(port, readRegisterPayload(reg), parser);
+            logger.trace(`Getting data from BMS ID ${deviceAddress} Register ${reg}`);
+            await requestData(port, readRegisterPayload(deviceAddress, reg), parser);
         }
         catch(e) {
             logger.error(e);
