@@ -45,6 +45,12 @@ const argv = yargs
         type: 'string',
         default: 'info'
     })
+    .option('numberofbms', {
+        alias: 'n',
+        description: 'Number of interconnected bms units to poll. Applies to JBD UP series address IDs as per DIP switches. Each poll gets data from a consecutive addresses starting from zero.',
+        type: 'integer',
+        default: '1'
+    })
     .choices('loglevel', ['trace', 'debug', 'info', 'warn', 'error', 'fatal'])
     .help()
     .alias('help', 'h')

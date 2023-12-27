@@ -4,11 +4,12 @@
   "description": "Utility to retrieve data from JBD/Overkill Solar BMS units and publish it to MQTT, written in NodeJS",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
   },
   "author": "mickwheelz",
   "license": "MIT",
-  "bin": {
+"bin": {
     "node-jbd": "./index.js"
   },
   "dependencies": {

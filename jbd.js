@@ -56,10 +56,10 @@ const register0x04 = {
         let count = 0;
         for(var i = 0; i < rawData[3]; i++) { 
             if(i == 0 || i % 2 == 0) {
-                const cellmV = `cell${count}mV`;
+                //const cellmV = `cell${count}mV`;
                 const cellV = `cell${count}V`;
-                this[cellmV] = toU16(cellData[i], cellData[i+1]);
-                this[cellV] = bytesToFloat(cellData[i], cellData[i+1], 0.001);
+                //this[cellmV] = toU16(cellData[i], cellData[i+1]);
+                this[cellV] = toU16(cellData[i], cellData[i+1]) / 1000.0; //bytesToFloat(cellData[i], cellData[i+1], 0.001);
                 count++;
             }
         }
@@ -94,7 +94,7 @@ function calcChecksum(packetData) {
     //Checksum is 0x10000 (65536 dec) minus the sum of the data plus its length, returned as a 2 byte array
     const dataLen = packetData[4];
     //summed bytes are [2]('status') + [3]('command') + all 'data'
-    const sumOfPayload = packetData.slice(2, 5 + dataLen).reduce((partial_sum, a) => partial_sum + a, 0);
+    const sumOfPayload = packetData.slice(1, 5 + dataLen).reduce((partial_sum, a) => partial_sum + a, 0);
     const checksum = Buffer.alloc(2)
     checksum.writeUInt16BE(0x10000 - sumOfPayload);
     return checksum;
@@ -104,6 +104,10 @@ function calcChecksum(packetData) {
 function validateChecksum(result) {
     //Payload is between the 4th and n-3th byte (last 3 bytes are checksum and stop byte)
     //JBD-UP series - probably the same byte positions (?)
+    if (result.length !== (result[4] + 8)) {
+        logger.trace('validateChecksum() failed on incorrect length: Expected ' + (result[4] + 8) + ', got ' + result.length); 
+        return false;
+    }
     const checksum = calcChecksum(result);
     logger.trace('Validating checksum: calcChecksum()=0x' + checksum.toString('hex')); //+ ', sumOfPayload=' + sumOfPayload + ', payloadLen=' + result[4]);
     return checksum[0] === result[result.length-3] && checksum[1] === result[result.length-2];
@@ -230,6 +234,10 @@ parser.on('data', function (rawData) {
     logger.trace('Recieved Data from BMS: 0x' + rawData.toString('hex'));
     if(validateChecksum(rawData)) {
         logger.trace('Data from is valid!');
+        if (rawData[3] !== 0) {
+            logger.warn('BMS reported an error in status. Packet dropped.');
+            return;
+        }
         switch(rawData[2]) {
             case 0x03:
                 const register3 = register0x03.setData(rawData.slice(1)); //slice off one byte for JBD UP series to align with existing decoder
