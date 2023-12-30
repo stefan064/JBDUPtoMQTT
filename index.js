@@ -16,10 +16,9 @@ async function main() {
         //send requests, response handled by eventlistener
           for (let i = 0; i < args.numberofbms; i++) {
             await jbd.getRegister(i, 0x03);
-            //wait 1s between requests
-            await sleep(1000);
-            
+            await sleep(500); //give time for bms to respond between requests
             await jbd.getRegister(i, 0x04);
+            await sleep(500);
           }
       }, 
       args.pollinginterval * 1000
