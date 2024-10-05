@@ -1,5 +1,6 @@
 const SerialPort = require('serialport');
 const Delimiter = require('@serialport/parser-delimiter')
+const InterByteTimeout = require('@serialport/parser-inter-byte-timeout')
 const logger = require('./logger');
 const cli = require('./cli');
 const mqtt = require('./mqtt');
@@ -229,7 +230,8 @@ async function requestData(serialPort, buff, parser){
     });      
 }
 
-const parser = port.pipe(new Delimiter({ delimiter: Buffer.alloc(1, STOP_BYTE), includeDelimiter: true }));
+//const parser = port.pipe(new Delimiter({ delimiter: Buffer.alloc(1, STOP_BYTE), includeDelimiter: true }));
+const parser = port.pipe(new InterByteTimeout({ interval: 100 })); //interval = silence period in ms before outputting data
 parser.on('data', function (rawData) {
     logger.trace('Recieved Data from BMS: 0x' + rawData.toString('hex'));
     if(validateChecksum(rawData)) {
@@ -259,7 +261,7 @@ parser.on('data', function (rawData) {
                     console.log(register4);
                 }
                 break;
-          }
+        }
     }
     else {
         logger.error('BMS RX data checksum failed!');
